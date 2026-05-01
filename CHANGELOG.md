@@ -4,6 +4,50 @@ All notable changes per phase. Each phase ends with an entry here.
 
 ## [Unreleased]
 
+### Phase 2 — Goals & BMR / TDEE
+
+- Pure nutrition helpers (no DB, no React) so they're trivially unit-testable:
+  - `lib/nutrition/bmr.ts` — Mifflin-St Jeor for male / female; returns `null` for `sex: "other"` (the equation isn't defined there) so the UI can fall back to manual override per F-GOAL-3. `ageInYears(dob)` lives here too.
+  - `lib/nutrition/tdee.ts` — `BMR × ACTIVITY_MULTIPLIERS[level]` with the F-GOAL-2 constants (sedentary 1.2 … very_active 1.9), rounded.
+  - `lib/nutrition/macros.ts` — `MACRO_PRESET_SPLITS` mirrors the F-GOAL-4 PRD splits (P/C/F balanced 30/40/30, high-protein 40/30/30, low-carb 35/25/40); `macroGramsFromPreset(kcal, preset)` converts kcal → grams using 4/4/9 kcal/g.
+  - `lib/nutrition/water.ts` — `defaultWaterGoalMl(weightKg) = round(weightKg × 35)` (F-GOAL-5); `DEFAULT_SLEEP_HOURS = 8` (F-GOAL-6).
+- Schema additions:
+  - `User.profile.weightKg` — Phase 2 placeholder so the goals form has a current weight to compute against. Phase 6 will switch the read source to the latest `BodyMeasurementEntry.weightKg`; this field stays as a fallback for users who haven't logged a measurement yet.
+  - `User.goals.macroPreset` — `"balanced" | "high_protein" | "low_carb" | "custom"` so the goals form can round-trip preset choice.
+- `lib/validation/goals.ts` — strict Zod schema (`.strict()`) for the PATCH body; integer guards on macro grams; sleep ∈ [0, 24].
+- `GET / PATCH /api/goals` — session-scoped; PATCH validates with `GoalsUpdateSchema` and `$set: { goals: parsed.data }`.
+- `/settings` page (server component → client `GoalsForm`):
+  - Suggested-energy card shows BMR + TDEE when DOB / sex / height / weight are all known. When they aren't, an info alert points back to `/profile`. When `sex === "other"`, a different alert says the equation can't be auto-applied and to set the goal manually (F-GOAL-3).
+  - **Use {N} kcal as my goal** button writes the TDEE into `dailyCalories` and recomputes preset macros.
+  - Macro split dropdown with the three presets + custom; preset modes lock the gram fields and recompute on calorie / preset change.
+  - **Use 35 ml/kg** shortcut for the water field, disabled when weight is missing.
+  - Sleep target and optional target weight inputs round out the form.
+- Profile form gains a Weight (kg) input that drives BMR/TDEE on `/settings` and the water default. `PATCH /api/profile` accepts `weightKg`.
+
+#### Tests
+
+- Unit (40 new across 5 files):
+  - `bmr.test.ts` — 6 male table-driven cases + 6 female (≥5 per sex per Phase 2 DoD), age computation, all edge cases (`other`, non-positive weight/height, negative age).
+  - `tdee.test.ts` — every activity multiplier asserted explicitly, plus null/zero BMR guards.
+  - `macros.test.ts` — preset constants pinned to PRD §5.2, kcal→grams round-trip with all three presets.
+  - `water.test.ts` — 35 ml/kg formula, null guards, sleep default.
+  - `validation/goals.test.ts` — strict mode rejects unknown keys, negative numbers, non-integer grams.
+- E2E:
+  - `goals-flow.spec.ts` — signup → fill profile (DOB, sex, height, weight, activity) → `/settings` → BMR/TDEE preview visible → "Use kcal" → preset switch → "Use 35 ml/kg" → save → reload persists.
+  - Second test: with default `sex="other"` and no weight, the "Use 35 ml/kg" shortcut is disabled.
+
+#### Migrations / indexes
+
+- `users` collection: two new optional fields — `profile.weightKg` (Number, nullable) and `goals.macroPreset` (String, default `"balanced"`). No new indexes; no migration needed because both are optional with sensible defaults.
+
+#### Notes / decisions
+
+- **`sex: "other"` ≠ broken UI.** The form shows an info alert telling the user to set their daily calorie goal manually; everything downstream still works.
+- **`weightKg` lives on `profile` for now.** When Phase 6 introduces `BodyMeasurementEntry`, the goals page should read the latest measurement first and only fall back to `profile.weightKg` if nothing is logged. The PRD §4.7 schema is already canonical there; this is a temporary residence, not a long-term design choice.
+- **Activity-multiplier rounding.** TDEE rounds to the nearest kcal. Frontend BMR display also rounds for readability; the underlying number is full precision in unit tests.
+
+---
+
 ### Phase 1 — Auth & User Profile
 
 - `User` Mongoose model implemented per PRD §4.1, with `profile` / `goals` / `reminders` sub-docs and `toJSON` transform that strips `passwordHash` and exposes `id`. Profile fields are optional at signup so users can complete them later on `/profile`; Phase 2 will treat missing values as "needs onboarding" rather than schema errors.
