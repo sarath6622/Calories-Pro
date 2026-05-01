@@ -21,6 +21,12 @@ export const ProfileUpdateSchema = z.object({
     .max(300)
     .nullable()
     .optional(),
+  weightKg: z
+    .number({ invalid_type_error: "Weight must be a number" })
+    .positive()
+    .max(500)
+    .nullable()
+    .optional(),
   activityLevel: z.enum(ACTIVITY_LEVELS).optional(),
   timezone: z.string().trim().min(1).max(64).optional(),
   units: z

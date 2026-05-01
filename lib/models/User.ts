@@ -31,6 +31,7 @@ const ProfileSchema = new Schema(
     dateOfBirth: { type: Date, default: null },
     sex: { type: String, enum: SEX_VALUES, default: "other" },
     heightCm: { type: Number, default: null },
+    weightKg: { type: Number, default: null },
     activityLevel: { type: String, enum: ACTIVITY_LEVELS, default: "sedentary" },
     timezone: { type: String, default: "UTC" },
     units: {
@@ -51,6 +52,11 @@ const GoalsSchema = new Schema(
     dailyWaterMl: { type: Number, default: 0 },
     targetWeightKg: { type: Number, default: null },
     sleepHoursTarget: { type: Number, default: 8 },
+    macroPreset: {
+      type: String,
+      enum: ["balanced", "high_protein", "low_carb", "custom"],
+      default: "balanced",
+    },
   },
   { _id: false },
 );
