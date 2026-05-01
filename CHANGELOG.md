@@ -4,6 +4,48 @@ All notable changes per phase. Each phase ends with an entry here.
 
 ## [Unreleased]
 
+### Phase 3 — Food Database (User-owned)
+
+- `Food` Mongoose model per PRD §4.2 with required `userId`, `name`, `servingSize`, `servingUnit`, `caloriesPerServing`, and `macrosPerServing` (proteinG/carbsG/fatG required ≥0; fiberG/sugarG nullable). Compound indexes on `(userId, name)` for lookup, `(userId, lastLoggedAt -1, timesLogged -1)` for the F-FOOD-4 sort, and `(userId, isFavorite)` for the Favorites filter. `toJSON` exposes `id` and drops `_id` and the version key.
+- `lib/models/food-enums.ts` — pure `SERVING_UNITS` and `FOOD_FILTERS` so client components can import them without dragging Mongoose into the bundle (same split pattern as `user-enums`).
+- `lib/validation/food.ts` — `FoodCreateSchema` (strict) and `FoodUpdateSchema` = `FoodCreateSchema.partial().strict()` so PATCH bodies validate the same shape and never silently drop typos.
+- **`lib/api/session.ts` — first appearance of the project's auth helper for parameterised endpoints.** `getSessionUser()` returns `{ userId, role }` from the JWT; `ownerFilter(user)` returns `{ userId }` for regular users and `{}` for admins (project rule #4: every user-data query is scoped by userId; admins are exempt). `canActOn(user, ownerId)` is the mutation-side equivalent.
+- API routes:
+  - `GET /api/foods?q=&filter=all|favorites|recent` — userId-scoped list with case-insensitive partial-match name search (F-FOOD-3, regex with input escaping). Sorted by `lastLoggedAt desc, timesLogged desc, name asc` (F-FOOD-4). `filter=favorites` adds `isFavorite: true`; `filter=recent` adds `lastLoggedAt: { $ne: null }`. Capped at 200 results.
+  - `POST /api/foods` — creates a food owned by the current user. The client never supplies `userId`.
+  - `GET / PATCH / DELETE /api/foods/:id` — load → exists check → `canActOn` ownership check → act. **Returns 403 for another user's food** (project rule #4).
+- `/foods` page (server shell + client `FoodsList`):
+  - Three filter tabs (All / Favorites / Recent), debounced search (250ms), TanStack Query for the list.
+  - Each row shows name + brand, calories per serving, macro breakdown (P/C/F), times logged + last-logged date when present, plus icon-button actions (favorite toggle, edit, delete).
+  - **Optimistic favorite toggle** (F-FOOD-5): updates the cached list immediately on click, rolls back on API error.
+  - **Hard delete** with a confirm dialog (F-FOOD-2 — log entries' future snapshots will preserve history per PRD §4.3, so soft-delete is unnecessary).
+  - Empty-state messages tailored per tab (no favorites yet / no recents yet / database empty with link to add).
+- `/foods/new` and `/foods/[id]/edit` share a single client `FoodForm` (RHF + Zod) with serving-unit dropdown, calorie / macro inputs, optional fiber + sugar, and an "Mark as favorite" toggle. The edit page is a server component that loads the food and 404s for ids that aren't valid ObjectIds *or* belong to another user (UI mirrors the API's 403 by returning 404 to avoid leaking existence).
+- After save, the FoodForm invalidates the `["foods"]` TanStack Query cache so the list reflects edits immediately on navigation back.
+
+#### Tests
+
+- Unit (11 new): `__tests__/validation/food.test.ts` covers required fields, serving-unit enum, positive serving size, non-negative calories/macros, nullable fiber/sugar, strict-mode rejection of unknown keys for both create and update schemas.
+- E2E:
+  - `foods-flow.spec.ts` — full CRUD: create two foods → search "egg" matches one and not the other → favorite toggle reflected on the Favorites tab → edit calorie value → list refreshes with the new value → delete with confirm dialog → row removed.
+  - **Second e2e: cross-user 403** — user A creates a food, user B signs in in a fresh context, attempts GET / PATCH / DELETE on A's food id and asserts each returns **403**. Unauth request gets 401. A's food survives intact. This is the first place project rule #4's "tried to read another user's data → 403" test convention is exercised.
+
+#### Migrations / indexes
+
+- New collection: `foods`
+  - Compound index `{ userId: 1, name: 1 }` (lookup / search)
+  - Compound index `{ userId: 1, lastLoggedAt: -1, timesLogged: -1 }` (frequent-first sort)
+  - Compound index `{ userId: 1, isFavorite: 1 }` (favorites filter)
+- No data migration; the collection is created lazily on first insert.
+
+#### Notes / decisions
+
+- **Hard delete, no soft delete.** Per F-FOOD-2 + DELIVERY_PLAN.md Phase 3 task list, the snapshot pattern (Phase 4) preserves history on log entries, so cascading the delete to the food doc is correct.
+- **Status code for cross-user access: 403, not 404.** Project rule #4 is explicit about 403. This does technically leak existence (404 vs 403 distinguishes "doesn't exist" from "exists but not yours"), but the rule prioritises clarity over enumeration-resistance for this app's threat model.
+- **`timesLogged` and `lastLoggedAt` are read-only in this phase.** They're declared on the schema with sensible defaults; Phase 4 will increment them when food logs are created.
+
+---
+
 ### Phase 2 — Goals & BMR / TDEE
 
 - Pure nutrition helpers (no DB, no React) so they're trivially unit-testable:
