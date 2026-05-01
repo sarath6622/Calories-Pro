@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth/options";
 import { connectDb } from "@/lib/db";
 import { User } from "@/lib/models/User";
-import { ProfileUpdateSchema } from "@/lib/validation/profile";
+import { GoalsUpdateSchema } from "@/lib/validation/goals";
 import { apiError, zodError } from "@/lib/api/errors";
 
 export async function GET() {
@@ -14,7 +14,16 @@ export async function GET() {
   const user = await User.findById(session.user.id);
   if (!user) return apiError(404, "User not found");
 
-  return NextResponse.json(user.toJSON());
+  return NextResponse.json({
+    goals: user.goals,
+    profile: {
+      dateOfBirth: user.profile?.dateOfBirth ?? null,
+      sex: user.profile?.sex ?? "other",
+      heightCm: user.profile?.heightCm ?? null,
+      weightKg: user.profile?.weightKg ?? null,
+      activityLevel: user.profile?.activityLevel ?? "sedentary",
+    },
+  });
 }
 
 export async function PATCH(req: Request) {
@@ -28,30 +37,16 @@ export async function PATCH(req: Request) {
     return apiError(400, "Invalid JSON body");
   }
 
-  const parsed = ProfileUpdateSchema.safeParse(payload);
+  const parsed = GoalsUpdateSchema.safeParse(payload);
   if (!parsed.success) return zodError(parsed.error);
-
-  const { name, dateOfBirth, sex, heightCm, weightKg, activityLevel, timezone, units } =
-    parsed.data;
-
-  const set: Record<string, unknown> = { name };
-  if (dateOfBirth !== undefined) {
-    set["profile.dateOfBirth"] = dateOfBirth ? new Date(dateOfBirth) : null;
-  }
-  if (sex !== undefined) set["profile.sex"] = sex;
-  if (heightCm !== undefined) set["profile.heightCm"] = heightCm;
-  if (weightKg !== undefined) set["profile.weightKg"] = weightKg;
-  if (activityLevel !== undefined) set["profile.activityLevel"] = activityLevel;
-  if (timezone !== undefined) set["profile.timezone"] = timezone;
-  if (units !== undefined) set["profile.units"] = units;
 
   await connectDb();
   const updated = await User.findByIdAndUpdate(
     session.user.id,
-    { $set: set },
+    { $set: { goals: parsed.data } },
     { new: true, runValidators: true },
   );
   if (!updated) return apiError(404, "User not found");
 
-  return NextResponse.json(updated.toJSON());
+  return NextResponse.json({ goals: updated.goals });
 }
