@@ -24,6 +24,7 @@ export async function connectDb(): Promise<Mongoose> {
   if (!cached.promise) {
     cached.promise = mongoose.connect(uri, {
       bufferCommands: false,
+      dbName: process.env.MONGODB_DB ?? "caloriespro",
     });
   }
 
