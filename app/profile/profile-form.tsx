@@ -28,6 +28,7 @@ export interface ProfileFormValues {
   dateOfBirth: string;
   sex: Sex;
   heightCm: number | null;
+  weightKg: number | null;
   activityLevel: ActivityLevel;
   timezone: string;
   units: {
@@ -66,6 +67,7 @@ export function ProfileForm({ initialValues }: { initialValues: ProfileFormValue
       dateOfBirth: values.dateOfBirth || null,
       sex: values.sex,
       heightCm: values.heightCm,
+      weightKg: values.weightKg,
       activityLevel: values.activityLevel,
       timezone: values.timezone,
       units: values.units,
@@ -143,6 +145,22 @@ export function ProfileForm({ initialValues }: { initialValues: ProfileFormValue
               onChange={(e) => field.onChange(e.target.value === "" ? null : Number(e.target.value))}
               error={!!errors.heightCm}
               helperText={errors.heightCm?.message}
+            />
+          )}
+        />
+
+        <Controller
+          control={control}
+          name="weightKg"
+          render={({ field }) => (
+            <TextField
+              label="Weight (kg)"
+              type="number"
+              fullWidth
+              value={field.value ?? ""}
+              onChange={(e) => field.onChange(e.target.value === "" ? null : Number(e.target.value))}
+              error={!!errors.weightKg}
+              helperText={errors.weightKg?.message ?? "Used to calculate BMR / TDEE and water goal."}
             />
           )}
         />

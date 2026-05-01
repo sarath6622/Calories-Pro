@@ -26,6 +26,7 @@ export default async function ProfilePage() {
       : "",
     sex: user.profile?.sex ?? "other",
     heightCm: user.profile?.heightCm ?? null,
+    weightKg: user.profile?.weightKg ?? null,
     activityLevel: user.profile?.activityLevel ?? "sedentary",
     timezone: user.profile?.timezone ?? "UTC",
     units: {
