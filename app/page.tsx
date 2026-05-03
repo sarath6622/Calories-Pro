@@ -4,5 +4,5 @@ import { authOptions } from "@/lib/auth/options";
 
 export default async function HomePage() {
   const session = await getServerSession(authOptions);
-  redirect(session?.user ? "/profile" : "/login");
+  redirect(session?.user ? "/dashboard" : "/login");
 }
