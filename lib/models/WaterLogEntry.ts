@@ -6,11 +6,20 @@ const WaterLogEntrySchema = new Schema(
     date: { type: Date, required: true },
     amountMl: { type: Number, required: true, min: 1 },
     loggedAt: { type: Date, default: () => new Date() },
+    // Phase 8 / F-PWA-5: see ExerciseEntry.ts for the rationale; option A adds
+    // this flag to all five log models for parity with FoodLogEntry.
+    syncedFromOffline: { type: Boolean, default: false },
+    // Phase 8: see FoodLogEntry.ts.
+    clientId: { type: String, default: null },
   },
   { timestamps: false },
 );
 
 WaterLogEntrySchema.index({ userId: 1, date: 1 });
+WaterLogEntrySchema.index(
+  { userId: 1, clientId: 1 },
+  { unique: true, partialFilterExpression: { clientId: { $type: "string" } } },
+);
 
 WaterLogEntrySchema.set("toJSON", {
   versionKey: false,

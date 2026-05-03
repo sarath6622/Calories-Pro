@@ -10,11 +10,20 @@ const SleepEntrySchema = new Schema(
     durationMinutes: { type: Number, required: true, min: 0 },
     quality: { type: Number, required: true, min: 1, max: 5 },
     note: { type: String, default: null },
+    // Phase 8 / F-PWA-5: parity flag added across all log models — see
+    // ExerciseEntry.ts for the option-A rationale.
+    syncedFromOffline: { type: Boolean, default: false },
+    // Phase 8: see FoodLogEntry.ts.
+    clientId: { type: String, default: null },
   },
   { timestamps: false },
 );
 
 SleepEntrySchema.index({ userId: 1, date: 1 });
+SleepEntrySchema.index(
+  { userId: 1, clientId: 1 },
+  { unique: true, partialFilterExpression: { clientId: { $type: "string" } } },
+);
 
 SleepEntrySchema.set("toJSON", {
   versionKey: false,

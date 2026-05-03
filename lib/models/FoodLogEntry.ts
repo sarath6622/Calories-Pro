@@ -31,6 +31,14 @@ const FoodLogEntrySchema = new Schema(
     snapshot: { type: SnapshotSchema, required: true },
     loggedAt: { type: Date, default: () => new Date() },
     syncedFromOffline: { type: Boolean, default: false },
+    // Phase 8 / F-PWA-5: client-generated UUID stamped onto entries that
+    // originated in the offline IndexedDB queue. The sparse-unique index on
+    // (userId, clientId) makes the /api/sync/replay endpoint race-safe — if a
+    // network glitch causes the same UUID to be replayed twice, the second
+    // insert hits E11000 and the endpoint returns `duplicate` instead of
+    // double-creating. Live (online) writes leave this `null` and skip the
+    // partial index entirely.
+    clientId: { type: String, default: null },
   },
   { timestamps: false },
 );
@@ -38,6 +46,10 @@ const FoodLogEntrySchema = new Schema(
 FoodLogEntrySchema.index({ userId: 1, date: 1 });
 FoodLogEntrySchema.index({ userId: 1, date: 1, mealType: 1 });
 FoodLogEntrySchema.index({ userId: 1, foodId: 1 });
+FoodLogEntrySchema.index(
+  { userId: 1, clientId: 1 },
+  { unique: true, partialFilterExpression: { clientId: { $type: "string" } } },
+);
 
 FoodLogEntrySchema.set("toJSON", {
   versionKey: false,

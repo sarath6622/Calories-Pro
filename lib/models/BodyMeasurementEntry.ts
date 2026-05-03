@@ -28,11 +28,20 @@ const BodyMeasurementEntrySchema = new Schema(
     note: { type: String, default: null },
     // Reserved for a future photo upload feature; stays empty in v1 (DELIVERY_PLAN.md Phase 6).
     photos: { type: [String], default: [] },
+    // Phase 8 / F-PWA-5: parity flag added across all log models — see
+    // ExerciseEntry.ts for the option-A rationale.
+    syncedFromOffline: { type: Boolean, default: false },
+    // Phase 8: see FoodLogEntry.ts.
+    clientId: { type: String, default: null },
   },
   { timestamps: true },
 );
 
 BodyMeasurementEntrySchema.index({ userId: 1, date: -1 });
+BodyMeasurementEntrySchema.index(
+  { userId: 1, clientId: 1 },
+  { unique: true, partialFilterExpression: { clientId: { $type: "string" } } },
+);
 
 BodyMeasurementEntrySchema.set("toJSON", {
   versionKey: false,
