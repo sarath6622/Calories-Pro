@@ -14,6 +14,7 @@ import Alert from "@mui/material/Alert";
 import Grid from "@mui/material/Grid";
 import { todayIsoDate } from "@/lib/log/date";
 import { CM_METRICS, METRIC_LABELS, type CmMetric } from "@/lib/models/measurement-enums";
+import { tryOnlineOrEnqueue } from "@/lib/offline/use-offline-mutation";
 
 type CircumferenceState = Record<CmMetric, string>;
 
@@ -71,11 +72,13 @@ export function MeasurementsForm() {
       if (Object.keys(measurementsCm).length > 0) payload.measurementsCm = measurementsCm;
       if (note.trim()) payload.note = note.trim();
 
-      const res = await fetch("/api/measurements", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(payload),
+      const result = await tryOnlineOrEnqueue({
+        type: "measurement",
+        url: "/api/measurements",
+        payload,
       });
+      if (result.outcome === "queued") return;
+      const res = result.response!;
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { error?: string };
         throw new Error(body.error ?? "Failed to log measurement");

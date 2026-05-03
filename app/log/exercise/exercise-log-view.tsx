@@ -16,6 +16,7 @@ import Skeleton from "@mui/material/Skeleton";
 import Tooltip from "@mui/material/Tooltip";
 import DeleteIcon from "@mui/icons-material/DeleteOutline";
 import { todayIsoDate } from "@/lib/log/date";
+import { tryOnlineOrEnqueue } from "@/lib/offline/use-offline-mutation";
 
 interface ExerciseEntry {
   id: string;
@@ -48,11 +49,13 @@ export function ExerciseLogView() {
 
   const createMutation = useMutation({
     mutationFn: async (input: { caloriesBurned: number; note: string | null }) => {
-      const res = await fetch("/api/logs/exercise", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ date, ...input }),
+      const result = await tryOnlineOrEnqueue({
+        type: "exercise",
+        url: "/api/logs/exercise",
+        payload: { date, ...input },
       });
+      if (result.outcome === "queued") return;
+      const res = result.response!;
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { error?: string };
         throw new Error(body.error ?? "Failed to log exercise");

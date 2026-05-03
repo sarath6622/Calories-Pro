@@ -13,6 +13,12 @@ export function Providers({ children }: { children: ReactNode }) {
       new QueryClient({
         defaultOptions: {
           queries: { staleTime: 30_000, refetchOnWindowFocus: false },
+          // Phase 8: TanStack Query's default `networkMode: "online"` pauses
+          // mutations when navigator.onLine === false, which would prevent our
+          // `tryOnlineOrEnqueue` wrapper from ever running the offline branch.
+          // We own the offline contract ourselves (enqueue → IDB → /api/sync/replay),
+          // so mutations must always invoke their mutationFn regardless of network.
+          mutations: { networkMode: "always" },
         },
       }),
   );

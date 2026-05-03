@@ -18,6 +18,7 @@ import Rating from "@mui/material/Rating";
 import DeleteIcon from "@mui/icons-material/DeleteOutline";
 import { todayIsoDate } from "@/lib/log/date";
 import { sleepDurationMinutes } from "@/lib/log/sleep";
+import { tryOnlineOrEnqueue } from "@/lib/offline/use-offline-mutation";
 
 interface SleepEntry {
   id: string;
@@ -89,17 +90,19 @@ export function SleepLogView() {
       if (!quality) throw new Error("Pick a quality rating (1–5)");
       const bd = new Date(bedtime);
       const wd = new Date(wakeTime);
-      const res = await fetch("/api/logs/sleep", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
+      const result = await tryOnlineOrEnqueue({
+        type: "sleep",
+        url: "/api/logs/sleep",
+        payload: {
           date,
           bedtime: bd.toISOString(),
           wakeTime: wd.toISOString(),
           quality,
           note: note.trim() ? note.trim() : null,
-        }),
+        },
       });
+      if (result.outcome === "queued") return;
+      const res = result.response!;
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { error?: string };
         throw new Error(body.error ?? "Failed to log sleep");

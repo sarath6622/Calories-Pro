@@ -18,6 +18,7 @@ import ListItemText from "@mui/material/ListItemText";
 import Skeleton from "@mui/material/Skeleton";
 import Box from "@mui/material/Box";
 import { MEAL_TYPES, MEAL_TYPE_LABELS, type MealType } from "@/lib/log/meal-type";
+import { tryOnlineOrEnqueue } from "@/lib/offline/use-offline-mutation";
 
 interface FoodCandidate {
   id: string;
@@ -90,16 +91,18 @@ export function LogFoodDialog({ open, mode, date, mealType, entry, onClose }: Di
   const createMutation = useMutation({
     mutationFn: async () => {
       if (!selectedFood) throw new Error("Pick a food first");
-      const res = await fetch("/api/logs/food", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      const result = await tryOnlineOrEnqueue({
+        type: "food_log",
+        url: "/api/logs/food",
+        payload: {
           foodId: selectedFood.id,
           date,
           mealType: meal,
           servings: Number(servings),
-        }),
+        },
       });
+      if (result.outcome === "queued") return;
+      const res = result.response!;
       if (!res.ok) {
         const body = (await res.json().catch(() => null)) as { error?: string } | null;
         throw new Error(body?.error ?? "Could not log food");

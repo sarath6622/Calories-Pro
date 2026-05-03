@@ -17,6 +17,7 @@ import Skeleton from "@mui/material/Skeleton";
 import Tooltip from "@mui/material/Tooltip";
 import DeleteIcon from "@mui/icons-material/DeleteOutline";
 import { todayIsoDate } from "@/lib/log/date";
+import { tryOnlineOrEnqueue } from "@/lib/offline/use-offline-mutation";
 
 interface WaterEntry {
   id: string;
@@ -62,11 +63,13 @@ export function WaterLogView() {
 
   const createMutation = useMutation({
     mutationFn: async (amountMl: number) => {
-      const res = await fetch("/api/logs/water", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ date, amountMl }),
+      const result = await tryOnlineOrEnqueue({
+        type: "water",
+        url: "/api/logs/water",
+        payload: { date, amountMl },
       });
+      if (result.outcome === "queued") return;
+      const res = result.response!;
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { error?: string };
         throw new Error(body.error ?? "Failed to log water");
