@@ -4,6 +4,56 @@ All notable changes per phase. Each phase ends with an entry here.
 
 ## [Unreleased]
 
+### Phase 4 — Food Logging & Daily Log View
+
+- `FoodLogEntry` model per PRD §4.3 with the **snapshot subdocument**: `name`, `caloriesPerServing`, and `macrosPerServing` are denormalised at log time so that future edits to the source `Food` never mutate historical entries (the headline invariant of this phase). `loggedAt` defaults to `new Date()`; `syncedFromOffline: false` is reserved for Phase 8.
+- Pure helpers (server + client safe):
+  - `lib/log/meal-type.ts` — `MEAL_TYPES`, `MEAL_TYPE_ORDER` (`breakfast → lunch → snack → dinner` for UI grouping), `MEAL_TYPE_LABELS`, and `defaultMealType(now)` implementing the F-LOG-2 windows (04:00–10:30 breakfast, 10:30–15:00 lunch, 15:00–18:00 snack, 18:00–04:00 dinner including across midnight).
+  - `lib/log/date.ts` — `isIsoDate`, `startOfDayUTC`, `endOfDayUTC`, `todayIsoDate`. Per PRD §4.3 the `date` field stores midnight UTC of the user's calendar day.
+  - `lib/log/snapshot.ts` — `buildFoodSnapshot(food)` deep-copies the nutrition fields with explicit `null` normalisation for `fiberG` / `sugarG`. Tested for independence from the source after build (mutating the food after snapshot does not change the snapshot).
+- `lib/validation/food-log.ts` — strict Zod for both create (`foodId`, `date`, `mealType`, `servings`) and update (`servings` only — F-LOG-4 forbids changing the entry's food / date / meal). PATCH explicitly rejects extra keys including `foodId` and `mealType` so the snapshot stays frozen.
+- API routes:
+  - `GET /api/logs/food?date=YYYY-MM-DD` — userId-scoped, sorted by `loggedAt asc`. Returns the date's entries with their snapshots.
+  - `POST /api/logs/food` — validates the food belongs to the caller (rejects another user's `foodId` with 403), builds the snapshot from the current Food values, persists the entry. **F-LOG-3 atomic update on Food**: `$inc: { timesLogged: 1 }, $set: { lastLoggedAt: now }`.
+  - `PATCH /api/logs/food/:id` — only edits `servings`. Cross-user → 403. The snapshot is intentionally NOT refreshed on edit; only the multiplier changes.
+  - `DELETE /api/logs/food/:id` — cross-user → 403.
+- `/log/food` page:
+  - Date picker (defaults to today, "Today" shortcut button when off).
+  - Daily totals card at the top: total kcal + protein/carbs/fat in grams, computed from the entries' snapshots.
+  - Four meal sections (Breakfast → Lunch → Snack → Dinner), each with its own Add button (so the dialog opens with the meal pre-selected) and a per-section total.
+  - Each entry row shows `<food name> · <servings> ×`, derived `kcal · P/C/F`, plus edit and delete icon buttons.
+  - **`LogFoodDialog`** is shared by add and edit. In create mode it has a debounced search over `/api/foods` and a clickable list; in edit mode it shows a banner with the snapshot's frozen kcal and only the servings field is editable. Live-preview of derived kcal as the user types servings.
+- `/log/food` is also wired through the existing role-based middleware so unauth visits redirect to `/login?callbackUrl=/log/food`.
+
+#### Tests
+
+- Unit (33 new across 4 files):
+  - `__tests__/log/meal-type.test.ts` — table-driven: 3 cases per meal at boundary + middle, including the dinner window crossing midnight (00:00, 03:59).
+  - `__tests__/log/snapshot.test.ts` — copy correctness; **mutating the source food after build does not change the snapshot**; mutating the snapshot after build does not change rebuilds.
+  - `__tests__/log/date.test.ts` — accepts YYYY-MM-DD, rejects malformed strings and impossible dates (Feb 30, month 13). UTC anchoring asserted via `toISOString()`.
+  - `__tests__/validation/food-log.test.ts` — strict-mode rejection on both schemas; servings-only on PATCH.
+- E2E (4 new):
+  - **`log-food.spec.ts:1` — log → totals → edit servings → delete.** Logs `TestEgg` (78 kcal) at 2 servings, asserts 156 kcal in the totals; edits to 3 servings, asserts 234 kcal; deletes the row.
+  - **`log-food.spec.ts:2` — snapshot preserved across food edit (PRD §4.3 invariant).** Logs `SnapEgg` at 100 kcal/serving × 1 serving; edits the source Food's `caloriesPerServing` to 999 via the API; reloads `/log/food` and asserts the entry still shows 100 kcal. Also re-fetches the food itself and asserts it really did change to 999 (so we know we're not catching a stale-cache illusion).
+  - **`log-food.spec.ts:3` — F-LOG-3 counters.** Logs the same food twice via the API; asserts `food.timesLogged` = 2 and `lastLoggedAt` is non-null.
+  - **`log-food.spec.ts:4` — cross-user 403.** A logs an entry; B in a fresh browser context attempts to PATCH and DELETE A's entry id and asserts each is 403; B's GET listing for the same date is empty (never includes A's entry); A's entry survives intact.
+
+#### Migrations / indexes
+
+- New collection: `foodlogentries`
+  - `(userId, date)` — daily lookup
+  - `(userId, date, mealType)` — meal-grouped daily reads
+  - `(userId, foodId)` — for "what does this user log most often" / future reverse lookups when a food is deleted
+- Existing `foods` collection now has its `timesLogged` and `lastLoggedAt` fields actually written by the POST handler; no schema change required (these were declared with defaults in Phase 3).
+
+#### Notes / decisions
+
+- **PATCH does NOT refresh the snapshot.** Only servings is editable, and even when the user edits their own log, the frozen snapshot wins. This is the strictest reading of the PRD §4.3 invariant; if a user wants up-to-date nutrition, they can delete and re-log.
+- **`food.lastLoggedAt` uses wall-clock `now`, not the entry's `date`.** A user backdating a log entry to last month should not push a food forward in the "Recent" tab — recency tracks when the user logged it, not what calendar day they assigned it to.
+- **Snapshot is built in the route handler, not a Mongoose pre-save hook.** Explicit-over-magic; tests can verify the produced snapshot directly without spinning up the model.
+
+---
+
 ### Phase 3 — Food Database (User-owned)
 
 - `Food` Mongoose model per PRD §4.2 with required `userId`, `name`, `servingSize`, `servingUnit`, `caloriesPerServing`, and `macrosPerServing` (proteinG/carbsG/fatG required ≥0; fiberG/sugarG nullable). Compound indexes on `(userId, name)` for lookup, `(userId, lastLoggedAt -1, timesLogged -1)` for the F-FOOD-4 sort, and `(userId, isFavorite)` for the Favorites filter. `toJSON` exposes `id` and drops `_id` and the version key.
