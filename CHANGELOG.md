@@ -4,6 +4,63 @@ All notable changes per phase. Each phase ends with an entry here.
 
 ## [Unreleased]
 
+### Phase 5 — Exercise, Water, Sleep Logs
+
+- Three new Mongoose models per PRD §4.4–§4.6, each `userId`-indexed and with a compound `(userId, date)` index for the per-day queries the dashboard (Phase 7) and these pages need:
+  - `ExerciseEntry` — required `caloriesBurned` (≥0), nullable `note`, `loggedAt` defaulted to `new Date()`. Multiple per day permitted (F-EX-2 — the dashboard sums them).
+  - `WaterLogEntry` — required `amountMl` (≥1), `loggedAt` defaulted to `new Date()`. The PRD field name is preserved verbatim (project rule #3).
+  - `SleepEntry` — `bedtime`, `wakeTime`, `durationMinutes` (computed at write time), `quality` ∈ [1,5] integer, nullable `note`. `date` is the wake date (PRD §4.6 explicit choice), midnight UTC, so `?date=YYYY-MM-DD` queries return "the night that ended on this date".
+- `lib/log/sleep.ts` — `sleepDurationMinutes(bedtime, wakeTime)` computes duration from two `Date` instants, rounded to the nearest minute. **Cross-midnight just works** because both inputs are full datetimes — no calendar arithmetic, just `(end - start) / 60_000`. Returns `null` when wakeTime ≤ bedtime or either input is invalid; the API turns that into a 400. The route handler computes duration on POST (and recomputes on PATCH if either timestamp changes) so clients can never desync `bedtime`/`wakeTime` from `durationMinutes`.
+- Zod validation schemas (shared client/server per project rule #6, all `.strict()`):
+  - `lib/validation/exercise-log.ts` — `ExerciseCreateSchema` requires `date` + `caloriesBurned`; note is optional/nullable. `ExerciseUpdateSchema` is partial but `.refine()`'d to require at least one of caloriesBurned/note (an empty PATCH is a 400, not a no-op).
+  - `lib/validation/water-log.ts` — `WaterCreateSchema`: integer `amountMl` ∈ [1, 10_000]. No update schema (water entries are immutable; only DELETE is exposed, matching PRD §7).
+  - `lib/validation/sleep-log.ts` — `SleepCreateSchema` cross-field-validates `wakeTime > bedtime`. `SleepUpdateSchema` mirrors that constraint **only when both timestamps are sent** so a quality-only or note-only PATCH still works.
+- API routes (all userId-scoped, error shape `{error, details?}` per NFR-4):
+  - `GET /api/logs/exercise?date=YYYY-MM-DD`, `POST /api/logs/exercise`, `PATCH/DELETE /api/logs/exercise/:id`.
+  - `GET /api/logs/water?date=YYYY-MM-DD`, `POST /api/logs/water`, `DELETE /api/logs/water/:id` (no PATCH per PRD §7 — water is "log it again" not "edit it").
+  - `GET /api/logs/sleep?date=YYYY-MM-DD`, `POST /api/logs/sleep`, `PATCH/DELETE /api/logs/sleep/:id`. POST and the timestamp-touching branch of PATCH both run `sleepDurationMinutes` and return 400 if it's null, so the persisted `durationMinutes` is always consistent with its timestamps.
+- Pages (all under the existing `withAuth` middleware so unauth visits redirect to `/login?callbackUrl=…`):
+  - `/log/exercise` — date picker + Today button, daily-total card (sum of `caloriesBurned` for the date — F-EX-2), inline form with `caloriesBurned` (number, required) and optional `note`, entries list with delete (F-EX-3).
+  - `/log/water` — date picker + Today button, daily-total card with **`LinearProgress` against the user's `goals.dailyWaterMl`** + percent label (F-WTR-2), three quick-add buttons (`+250`/`+500`/`+750` ml — F-WTR-1) + custom integer input, entries list with delete. When the user has no water goal yet, the progress bar is replaced with an info alert pointing to Settings.
+  - `/log/sleep` — wake-date picker, bedtime + wake-time `datetime-local` pickers (defaults: yesterday 23:00 → today 07:00 in the browser's local TZ), live duration preview (`<testid="sleep-duration-preview">`), MUI `Rating` 5-star quality input, optional multiline note, entries list with delete. Times are converted to ISO via `Date.toISOString()` before POST so the server sees a UTC instant regardless of the user's TZ.
+
+#### Tests
+
+- Unit (36 new across 4 files):
+  - `__tests__/log/sleep.test.ts` — 8 cases covering whole-hour duration, **the cross-midnight edge case (PRD §4.6)** at 23:30 → 07:15 = 7h 45m, daytime nap, sub-minute rounding, equal-times → null, inverted → null, invalid Date → null, and a multi-day sanity case.
+  - `__tests__/validation/exercise-log.test.ts` — 11 cases: zero calories accepted, negative rejected, malformed date rejected, strict rejection of unknown keys; update schema rejects empty body and rejects sneak-in of `date` or `userId`.
+  - `__tests__/validation/water-log.test.ts` — 6 cases: zero/negative/fractional/oversized rejected, malformed date rejected, strict rejection of unknown keys.
+  - `__tests__/validation/sleep-log.test.ts` — 11 cases: wakeTime ≤ bedtime rejected on both create and update (only when both timestamps present), quality ∈ {1,2,3,4,5}, malformed datetime rejected, strict rejection of `durationMinutes` (server-computed, never client-supplied).
+- E2E (6 new across 3 files):
+  - **`log-exercise.spec.ts:17` — log → totals sum → delete.** Logs 250 kcal + a note, asserts both visible; logs 100 more, asserts 350 kcal total; deletes the 250 row, asserts the note is gone and 100 kcal remains.
+  - **`log-exercise.spec.ts:41` — cross-user 403.** A creates an entry; B in a fresh browser context cannot see it in their date listing, gets 403 on PATCH and DELETE; anon GET → 401; A's entry survives intact.
+  - **`log-water.spec.ts:17` — quick-add → custom → progress → delete.** Sets `dailyWaterMl: 2000` via `/api/goals`; uses `+250` quick-add (asserts 250 ml + 13% progress), then `+500` (asserts 750 ml total), then a custom 100 ml (asserts 850 ml), then deletes the 100 ml row (asserts 750 ml).
+  - **`log-water.spec.ts:57` — cross-user 403.** A logs 250 ml; B cannot see/delete; anon → 401; A's entry survives.
+  - **`log-sleep.spec.ts:17` — sleep crossing midnight → duration → delete.** Uses the deterministic past date 2026-05-02 23:30 → 2026-05-03 07:15 (TZ-flake-resistant: a fixed past date doesn't depend on "today"); asserts the duration preview shows `7h 45m`, picks 4-star quality, logs the entry, asserts it appears with the same duration, then deletes.
+  - **`log-sleep.spec.ts:48` — cross-user 403 + invalid time POST 400.** A creates an entry, asserts the API computed `durationMinutes` = 480 server-side (8h); B cannot see/PATCH/DELETE; anon → 401; A's POST with bedtime > wakeTime is 400 (cross-field validation honoured even when payload is otherwise well-formed).
+
+#### Migrations / indexes
+
+- New collection: `exerciseentries`
+  - `(userId)` (single-field index from the schema — for cross-collection user dashboards in Phase 7)
+  - `(userId, date)` — for the date-filtered list endpoint and dashboard aggregations
+- New collection: `waterlogentries`
+  - `(userId)` and `(userId, date)` — same pattern
+- New collection: `sleepentries`
+  - `(userId)` and `(userId, date)` — same pattern. Wake-date is the indexed field per PRD §4.6.
+
+All three collections are created lazily on first insert; no data migration required.
+
+#### Notes / decisions
+
+- **Water has no PATCH endpoint.** PRD §7 lists `DELETE /api/logs/water/:id` only, and the UX matches: a wrong amount is logged again or removed, not edited. This matches the F-WTR-1 quick-add philosophy — entries are atomic mini-events rather than long-form records.
+- **Sleep `durationMinutes` is server-computed, not client-supplied.** Even though the form previews it, the API recomputes it from `bedtime` and `wakeTime` on POST and on any timestamp-touching PATCH. The Zod schema's `.strict()` mode actively rejects a client-sent `durationMinutes` so a bad client can't desync the field from its timestamps.
+- **Sleep `date` = wake date.** PRD §4.6 is explicit; this matches how users think ("how did I sleep last night?" → asks about the date you woke up). It also makes the per-day GET semantics intuitive: `?date=2026-05-03` returns the night that ended this morning.
+- **Sleep duration uses real `Date` instants, not local time arithmetic.** That's why crossing midnight Just Works — the difference of two ms-since-epoch is timezone-independent. The unit test for the 23:30 → 07:15 case pins this behaviour so a future regression to "local time of bedtime + delta" would fail loudly.
+- **Exercise `note` and sleep `note` Zod allow `null` *and* `undefined`.** Forms send `null` to clear; admin tools that PATCH only one field can omit the key. Both shapes are equivalent server-side (`undefined` means "leave alone", explicit `null` means "clear").
+
+---
+
 ### Phase 4 — Food Logging & Daily Log View
 
 - `FoodLogEntry` model per PRD §4.3 with the **snapshot subdocument**: `name`, `caloriesPerServing`, and `macrosPerServing` are denormalised at log time so that future edits to the source `Food` never mutate historical entries (the headline invariant of this phase). `loggedAt` defaults to `new Date()`; `syncedFromOffline: false` is reserved for Phase 8.
