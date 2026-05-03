@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { signIn } from "next-auth/react";
@@ -13,7 +13,7 @@ import Alert from "@mui/material/Alert";
 import Typography from "@mui/material/Typography";
 import { LoginSchema, type LoginInput } from "@/lib/validation/auth";
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
   const callbackUrl = params.get("callbackUrl") ?? "/profile";
@@ -77,5 +77,15 @@ export default function LoginPage() {
         </Stack>
       </Stack>
     </form>
+  );
+}
+
+export default function LoginPage() {
+  // Suspense boundary required: useSearchParams forces this subtree out of the
+  // static prerender; without it, `next build` fails on /login.
+  return (
+    <Suspense fallback={null}>
+      <LoginForm />
+    </Suspense>
   );
 }

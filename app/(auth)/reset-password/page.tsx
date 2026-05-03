@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
@@ -12,7 +12,7 @@ import Alert from "@mui/material/Alert";
 import Typography from "@mui/material/Typography";
 import { ResetPasswordSchema, type ResetPasswordInput } from "@/lib/validation/auth";
 
-export default function ResetPasswordPage() {
+function ResetPasswordForm() {
   const router = useRouter();
   const params = useSearchParams();
   const token = params.get("token") ?? "";
@@ -91,5 +91,15 @@ export default function ResetPasswordPage() {
         </Button>
       </Stack>
     </form>
+  );
+}
+
+export default function ResetPasswordPage() {
+  // Suspense boundary required: useSearchParams forces this subtree out of the
+  // static prerender; without it, `next build` fails on /reset-password.
+  return (
+    <Suspense fallback={null}>
+      <ResetPasswordForm />
+    </Suspense>
   );
 }
