@@ -186,24 +186,24 @@
 **Goal**: Installable, offline-capable, with a working sync queue.
 
 ### Tasks
-- [ ] Generate icons (192, 512, maskable). Place in `/public/icons`.
-- [ ] `manifest.json` with name, theme_color, display: standalone, scope, start_url.
-- [ ] Service Worker via `next-pwa`:
+- [x] Generate icons (192, 512, maskable). Place in `/public/icons`.
+- [x] `manifest.json` with name, theme_color, display: standalone, scope, start_url.
+- [x] Service Worker via `next-pwa`:
   - Precache app shell.
   - Stale-while-revalidate for API GET.
   - Network-only for API POST/PATCH/DELETE (queued via Background Sync if offline).
-- [ ] Install prompt component (capture `beforeinstallprompt`).
-- [ ] IndexedDB store via `idb` for `OfflineSyncQueue` per PRD §4.8.
-- [ ] Wrap all log-creation mutations: if offline, write to queue + show "queued" toast.
-- [ ] `POST /api/sync/replay` endpoint that accepts a batch and creates entries (idempotent via client-generated UUIDs).
-- [ ] Connectivity listener that drains queue with exponential backoff.
-- [ ] Mark replayed entries `syncedFromOffline=true`.
-- [ ] E2E test (Playwright with `context.setOffline(true)`): create entry offline → go online → verify it appears.
+- [x] Install prompt component (capture `beforeinstallprompt`).
+- [x] IndexedDB store via `idb` for `OfflineSyncQueue` per PRD §4.8.
+- [x] Wrap all log-creation mutations: if offline, write to queue + show "queued" toast.
+- [x] `POST /api/sync/replay` endpoint that accepts a batch and creates entries (idempotent via client-generated UUIDs).
+- [x] Connectivity listener that drains queue with exponential backoff.
+- [x] Mark replayed entries `syncedFromOffline=true`.
+- [x] E2E test (Playwright with `context.setOffline(true)`): create entry offline → go online → verify it appears.
 
 ### Definition of Done
-- F-PWA-1 through F-PWA-6 satisfied.
-- Lighthouse PWA score ≥ 90 (NFR-2).
-- App opens and shows last-cached dashboard while offline.
+- F-PWA-1 through F-PWA-6 satisfied. ✅
+- Lighthouse PWA score ≥ 90 (NFR-2). _(Manual verification — service worker is emitted; final Lighthouse score is part of Phase 10 polish.)_
+- App opens and shows last-cached dashboard while offline. ✅ (NetworkFirst + 3 s timeout for navigations falls back to cache.)
 
 ---
 
