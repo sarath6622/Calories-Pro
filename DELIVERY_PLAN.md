@@ -166,18 +166,18 @@
 **Goal**: A unified today / week / month view tying it all together.
 
 ### Tasks
-- [ ] `/dashboard` page with three tabs: Today, This Week, This Month.
-- [ ] Today: calories in / out / net, macros ring, water bar, last sleep, current weight, remaining vs goal.
-- [ ] Weekly: line chart of daily calories, macros stacked bar, weight trend, sleep avg, days within ±10% of goal.
-- [ ] Monthly: same, 30-day window.
-- [ ] Aggregation API: `GET /api/dashboard/today`, `GET /api/dashboard/summary?range=`.
-- [ ] Use MongoDB aggregation pipelines (group by date) — write these as documented helpers in `lib/agg/`.
-- [ ] Goal-met toast when target reached.
-- [ ] Tests for aggregation (seed DB, assert sums).
+- [x] `/dashboard` page with three tabs: Today, This Week, This Month.
+- [x] Today: calories in / out / net, macros ring, water bar, last sleep, current weight, remaining vs goal.
+- [x] Weekly: line chart of daily calories, macros stacked bar, weight trend, sleep avg, days within ±10% of goal.
+- [x] Monthly: same, 30-day window.
+- [x] Aggregation API: `GET /api/dashboard/today`, `GET /api/dashboard/summary?range=`.
+- [x] Use MongoDB aggregation pipelines (group by date) — write these as documented helpers in `lib/agg/`.
+- [x] Goal-met toast when target reached.
+- [x] Tests for aggregation (seed DB, assert sums).
 
 ### Definition of Done
-- F-DSH-1 through F-DSH-5 satisfied.
-- Page interactive in <500ms after data loads.
+- F-DSH-1 through F-DSH-5 satisfied. ✅
+- Page interactive in <500ms after data loads. ✅ (Today payload built via 6 parallel `Promise.all` reads; charts dynamically loaded only on week/month tabs.)
 
 ---
 
