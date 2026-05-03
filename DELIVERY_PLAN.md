@@ -147,17 +147,17 @@
 **Goal**: Track weight, body fat, and circumference measurements with trends.
 
 ### Tasks
-- [ ] `BodyMeasurementEntry` model per PRD §4.7. All numeric fields optional.
-- [ ] `/measurements` cards page: most-recent value of each metric + delta vs previous.
-- [ ] `/measurements/new`: form with all fields.
-- [ ] `/measurements/history`: per-metric trend chart with range selector.
-- [ ] `photos` field declared but ignored in v1 (no upload UI).
-- [ ] APIs per PRD §7.
-- [ ] Tests for delta computation when only some metrics logged.
+- [x] `BodyMeasurementEntry` model per PRD §4.7. All numeric fields optional.
+- [x] `/measurements` cards page: most-recent value of each metric + delta vs previous.
+- [x] `/measurements/new`: form with all fields.
+- [x] `/measurements/history`: per-metric trend chart with range selector.
+- [x] `photos` field declared but ignored in v1 (no upload UI).
+- [x] APIs per PRD §7.
+- [x] Tests for delta computation when only some metrics logged.
 
 ### Definition of Done
-- F-BM-1 through F-BM-4 satisfied.
-- Logging only weight one day and only chest the next does not break delta display.
+- F-BM-1 through F-BM-4 satisfied. ✅
+- Logging only weight one day and only chest the next does not break delta display. ✅
 
 ---
 
