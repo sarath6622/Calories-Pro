@@ -30,3 +30,10 @@ playwright/.cache/
 
 # typescript build info
 *.tsbuildinfo
+
+# next-pwa generated service worker (Phase 8) — built into /public on each `next build`
+public/sw.js
+public/sw.js.map
+public/workbox-*.js
+public/workbox-*.js.map
+public/fallback-*.js
